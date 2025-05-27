@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .  # Собираем из корня проекта (где лежит Dockerfile)
+    container_name: backend
+    restart: always
+    volumes:
+      - .:/app                     # Монтируем весь проект
+      - static_volume:/app/static   # Статика Django
+      - media_volume:/app/media     # Медиа Django
+    env_file:
+      - .env                       # Переменные окружения
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn foodgram.wsgi:application --bind 0.0.0.0:8000"
+    ports:
+      - "8000:8000"  # Для отладки
+
+  frontend:
+    build: ./frontend  # Если есть Dockerfile для React
+    container_name: frontend
+    restart: always
+    volumes:
+      - ./frontend/build:/var/www/html  # Сборка React
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend/build:/var/www/html       # Статика фронтенда
+      - static_volume:/var/www/backend/static # Статика Django
+      - media_volume:/var/www/backend/media   # Медиа Django
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  static_volume:
+  media_volume:
