@@ -1,10 +1,8 @@
 from django_filters import rest_framework as filters
-from rest_framework.filters import SearchFilter
-
 from api.models import Ingredient, Recipe
 
 
-class IngredientFilter(SearchFilter):
+class IngredientFilter(filters.FilterSet):
     search_param = 'name'
 
     class Meta:
@@ -21,7 +19,7 @@ class RecipeFilter(filters.FilterSet):
 
     class Meta:
         model = Recipe
-        fields = ('author', 'tags', 'is_favorited', 'is_in_shopping_cart')
+        fields = ('author', 'is_favorited', 'is_in_shopping_cart')
 
     def filter_is_favorited(self, queryset, name, value):
         if value and self.request.user.is_authenticated:
