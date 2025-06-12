@@ -1,5 +1,5 @@
 from django.urls import path
-from api.views import IngredientViewSet, RecipeViewSet
+from api.views import IngredientViewSet, RecipeViewSet, RecipeShortLinkViewSet
 
 urlpatterns = [
     # Ingredients endpoints
@@ -18,13 +18,15 @@ urlpatterns = [
          name='recipes-download-shopping-cart'),
     path('api/recipes/<pk>/',
          RecipeViewSet.as_view({'get': 'retrieve', 'put': 'update',
-                              'patch': 'partial_update', 'delete': 'destroy'}),
+                                'patch': 'partial_update', 'delete': 'destroy'}),
          name='recipes-detail'),
     path('api/recipes/<pk>/favorite/',
          RecipeViewSet.as_view({'post': 'favorite', 'delete': 'unfavorite'}),
          name='recipes-favorite'),
     path('api/recipes/<pk>/shopping_cart/',
          RecipeViewSet.as_view({'post': 'add_to_shopping_cart',
-                              'delete': 'remove_from_shopping_cart'}),
+                                'delete': 'remove_from_shopping_cart'}),
          name='recipes-shopping-cart'),
+    path('api/recipes/<pk>/get-link/',
+         RecipeShortLinkViewSet.as_view({'get': 'retrieve'}), name='recipe-link'),
 ]

@@ -1,6 +1,12 @@
+# models.py
 from django.core.validators import MinValueValidator
 from django.db import models
 from users.models import User
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+from django.conf import settings
+import secrets
+import string
 
 
 class Tag(models.Model):
@@ -53,6 +59,25 @@ class Recipe(models.Model):
         validators=[MinValueValidator(1)]
     )
     pub_date = models.DateTimeField('Дата публикации', auto_now_add=True)
+    short_link = models.URLField('Короткая ссылка', blank=True, null=True)
+
+    DOMAIN = 'http://127.0.0.1/'  # Замени на свой домен
+
+    def save(self, *args, **kwargs):
+        if not self.short_link:
+            self.short_link = self.generate_short_link()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_short_link(cls):
+        characters = string.ascii_letters + string.digits
+        for _ in range(100):  # Попробует до 10 раз создать уникальный код
+            short_code = ''.join(secrets.choice(characters) for _ in range(8))
+            link = f"{cls.DOMAIN}{short_code}"
+            if not Recipe.objects.filter(short_link=link).exists():
+                return link
+        raise Exception("Не удалось сгенерировать уникальную короткую ссылку")
+
 
     class Meta:
         ordering = ['-pub_date']

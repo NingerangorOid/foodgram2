@@ -1,4 +1,3 @@
-from django.shortcuts import get_object_or_404
 import base64
 import uuid
 from django.core.files.base import ContentFile
@@ -37,145 +36,6 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecipeIngredient
         fields = ('id', 'name', 'measurement_unit', 'amount')
-
-
-class RecipeSerializer(serializers.ModelSerializer):
-    author = CustomUserSerializer(read_only=True)
-    ingredients_in_db = RecipeIngredientSerializer(
-        source='recipe_ingredients', many=True, read_only=True
-    )
-    is_favorited = serializers.SerializerMethodField()
-    is_in_shopping_cart = serializers.SerializerMethodField()
-    image_in_db = serializers.SerializerMethodField()
-
-    # Для записи
-    ingredients = serializers.ListField(
-        child=serializers.DictField(),
-        write_only=True
-    )
-    image = Base64ImageField(write_only=True)
-
-    class Meta:
-        model = Recipe
-        fields = (
-            'id', 'author', 'ingredients', 'is_favorited',
-            'is_in_shopping_cart', 'name', 'image', 'text', 'cooking_time',
-            'ingredients_in_db', 'image_in_db'
-        )
-
-    def get_image_in_db(self, obj):
-        request = self.context.get('request')
-        if obj.image and hasattr(obj.image, 'url'):
-            return request.build_absolute_uri(obj.image.url)
-        return None
-
-    def get_is_favorited(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            from api.models import Favorite
-            return Favorite.objects.filter(user=request.user, recipe=obj).exists()
-        return False
-
-    def get_is_in_shopping_cart(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            from api.models import ShoppingCart
-            return ShoppingCart.objects.filter(user=request.user, recipe=obj).exists()
-        return False
-
-    def validate_ingredients(self, value):
-        if not value or len(value) == 0:
-            raise ValidationError('Добавьте хотя бы один ингредиент')
-
-        seen_ids = set()
-        for item in value:
-            if 'id' not in item:
-                raise ValidationError('У ингредиента должно быть поле "id"')
-            if 'amount' not in item:
-                raise ValidationError('У ингредиента должно быть поле "amount"')
-
-            try:
-                ingredient_id = int(item['id'])
-                amount = int(item['amount'])
-            except (TypeError, ValueError):
-                raise ValidationError('ID и количество должны быть целыми числами')
-
-            if ingredient_id in seen_ids:
-                raise ValidationError(f'Ингредиент с ID {ingredient_id} повторяется')
-            seen_ids.add(ingredient_id)
-
-            if amount <= 0:
-                raise ValidationError('Количество должно быть больше нуля')
-
-            get_object_or_404(Ingredient, id=ingredient_id)
-
-        return value
-
-    def create(self, validated_data):
-        ingredients_data = validated_data.pop('ingredients')
-        image_data = validated_data.pop('image')
-
-        recipe = Recipe.objects.create(
-            author=self.context['request'].user,
-            image=image_data,
-            **validated_data
-        )
-
-        recipe_ingredients = [
-            RecipeIngredient(
-                recipe=recipe,
-                ingredient_id=item['id'],
-                amount=item['amount']
-            ) for item in ingredients_data
-        ]
-        RecipeIngredient.objects.bulk_create(recipe_ingredients)
-
-        return recipe
-
-    def update(self, instance, validated_data):
-        ingredients_data = validated_data.pop('ingredients', None)
-        image_data = validated_data.pop('image', None)
-
-        instance.name = validated_data.get('name', instance.name)
-        instance.text = validated_data.get('text', instance.text)
-        instance.cooking_time = validated_data.get('cooking_time', instance.cooking_time)
-
-        if image_data:
-            instance.image = image_data
-
-        if ingredients_data is not None:
-            instance.recipe_ingredients.all().delete()
-            recipe_ingredients = [
-                RecipeIngredient(
-                    recipe=instance,
-                    ingredient_id=item['id'],
-                    amount=item['amount']
-                ) for item in ingredients_data
-            ]
-            RecipeIngredient.objects.bulk_create(recipe_ingredients)
-
-        instance.save()
-        return instance
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data['ingredients'] = data.pop('ingredients_in_db', [])
-        data['image'] = data.pop('image_in_db', None)
-        return data
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-
-        # Добавляем нужные нам поля в ответ
-        if 'ingredients_in_db' in data:
-            data['ingredients'] = data['ingredients_in_db']
-            data.pop('ingredients_in_db', None)
-
-        if 'image_in_db' in data:
-            data['image'] = data['image_in_db']
-            data.pop('image_in_db', None)
-
-        return data
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
@@ -222,3 +82,149 @@ class ShoppingCartSerializer(serializers.ModelSerializer):
             'image': instance.recipe.image.url,
             'cooking_time': instance.recipe.cooking_time
         }
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    author = CustomUserSerializer(read_only=True)
+    ingredients_in_db = RecipeIngredientSerializer(
+        source='recipe_ingredients', many=True, read_only=True
+    )
+    is_favorited = serializers.SerializerMethodField()
+    is_in_shopping_cart = serializers.SerializerMethodField()
+    image_in_db = serializers.SerializerMethodField()
+
+    # Для записи
+    ingredients = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True
+    )
+    image = Base64ImageField(write_only=True)
+
+    class Meta:
+        model = Recipe
+        fields = (
+            'id', 'author', 'ingredients', 'is_favorited',
+            'is_in_shopping_cart', 'name', 'image', 'text', 'cooking_time',
+            'ingredients_in_db', 'image_in_db',
+        )
+
+    def get_image_in_db(self, obj):
+        request = self.context.get('request')
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url)
+        return None
+
+    def get_is_favorited(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            from api.models import Favorite
+            return Favorite.objects.filter(user=request.user, recipe=obj).exists()
+        return False
+
+    def get_is_in_shopping_cart(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            from api.models import ShoppingCart
+            return ShoppingCart.objects.filter(user=request.user, recipe=obj).exists()
+        return False
+
+    def validate_ingredients(self, value):
+        if not value or len(value) == 0:
+            raise ValidationError('Добавьте хотя бы один ингредиент')
+
+        seen_ids = set()
+        for item in value:
+            if 'id' not in item:
+                raise ValidationError('У ингредиента должно быть поле "id"')
+            if 'amount' not in item:
+                raise ValidationError('У ингредиента должно быть поле "amount"')
+
+            try:
+                ingredient_id = int(item['id'])
+                amount = int(item['amount'])
+            except (TypeError, ValueError):
+                raise ValidationError('ID и количество должны быть целыми числами')
+
+            if ingredient_id in seen_ids:
+                raise ValidationError(f'Ингредиент с ID {ingredient_id} повторяется')
+            seen_ids.add(ingredient_id)
+
+            if not Ingredient.objects.filter(id=ingredient_id).exists():
+                raise ValidationError(f'Ингредиент с ID {ingredient_id} не существует')
+
+            if amount <= 0:
+                raise ValidationError('Количество должно быть больше нуля')
+
+        return value
+
+    def create(self, validated_data):
+        ingredients_data = validated_data.pop('ingredients')
+        image_data = validated_data.pop('image')
+        validated_data.pop('author', None)
+        recipe = Recipe.objects.create(
+            author=self.context['request'].user,
+            image=image_data,
+            **validated_data
+        )
+
+        recipe_ingredients = [
+            RecipeIngredient(
+                recipe=recipe,
+                ingredient_id=item['id'],
+                amount=item['amount']
+            ) for item in ingredients_data
+        ]
+        RecipeIngredient.objects.bulk_create(recipe_ingredients)
+        recipe.save()
+        return recipe
+
+    def update(self, instance, validated_data):
+        ingredients_data = validated_data.get('ingredients')  # Не используем pop(), чтобы не терять информацию
+
+        if ingredients_data is None:
+            raise ValidationError({'ingredients': ['Это поле обязательно']})
+
+        image_data = validated_data.pop('image', None)
+
+        instance.name = validated_data.get('name', instance.name)
+        instance.text = validated_data.get('text', instance.text)
+        instance.cooking_time = validated_data.get('cooking_time', instance.cooking_time)
+
+        if image_data:
+            instance.image = image_data
+
+        if ingredients_data is not None:
+            instance.recipe_ingredients.all().delete()
+            recipe_ingredients = [
+                RecipeIngredient(
+                    recipe=instance,
+                    ingredient_id=item['id'],
+                    amount=item['amount']
+                ) for item in ingredients_data
+            ]
+            RecipeIngredient.objects.bulk_create(recipe_ingredients)
+
+        instance.save()
+        return instance
+
+    def to_representation(self, instance):
+        # Сначала проверяем флаг
+
+        data = super().to_representation(instance)
+
+        if 'ingredients_in_db' in data:
+            data['ingredients'] = data['ingredients_in_db']
+            data.pop('ingredients_in_db', None)
+
+        if 'image_in_db' in data:
+            data['image'] = data['image_in_db']
+            data.pop('image_in_db', None)
+
+        return data
+
+
+class RecipeShortLinkSerializer(serializers.Serializer):
+    short_link = serializers.URLField(read_only=True)
+
+    def to_representation(self, instance):
+        return {'short_link': instance.short_link}

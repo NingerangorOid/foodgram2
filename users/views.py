@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status, viewsets, permissions
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -6,9 +6,8 @@ from django.contrib.auth import get_user_model
 
 from users.models import Subscription
 from users.serializers import (
-    CustomUserSerializer, SetPasswordSerializer, AvatarSerializer, TokenSerializer
+    CustomUserSerializer, SetPasswordSerializer, AvatarSerializer, TokenSerializer, SubscriptionSerializer
 )
-from rest_framework import status, viewsets, permissions
 from rest_framework.decorators import action
 
 
@@ -176,3 +175,45 @@ class UserTokenView(generics.RetrieveAPIView):
     def get_object(self):
         token, created = Token.objects.get_or_create(user=self.request.user)
         return token
+
+
+class SubscriptionViewSet(viewsets.ModelViewSet):
+    queryset = Subscription.objects.all()
+    serializer_class = SubscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'author_id'
+
+    def get_queryset(self):
+        return Subscription.objects.filter(user=self.request.user)
+
+    # Список подписок: GET /api/users/subscriptions/
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    # Подписка/отписка: POST/DELETE /api/users/<id>/subscribe/
+    @action(detail=True, methods=['post', 'delete'])
+    def subscribe(self, request, pk=None):
+        user = request.user
+
+        if not User.objects.filter(id=pk).exists():
+            return Response({'error': 'Пользователь не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.id == pk:
+            return Response({'error': 'Нельзя подписаться на себя'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method == 'POST':
+            subscription, created = Subscription.objects.get_or_create(
+                user=user,
+                author_id=pk
+            )
+            if not created:
+                return Response({'error': 'Вы уже подписаны'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(status=status.HTTP_201_CREATED)
+
+        elif request.method == 'DELETE':
+            deleted, _ = Subscription.objects.filter(user=user, author_id=pk).delete()
+            if not deleted:
+                return Response({'error': 'Вы не подписаны'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(status=status.HTTP_204_NO_CONTENT)

@@ -103,3 +103,36 @@ class TokenSerializer(serializers.ModelSerializer):
         model = Token
         fields = ('key', 'user')
 
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    author = CustomUserSerializer(read_only=True)  # Твой сериализатор пользователя
+
+    class Meta:
+        model = Subscription
+        fields = ['author']
+
+    def validate(self, data):
+        request = self.context.get('request')
+        view = self.context.get('view')
+        user = request.user
+        author_id = view.kwargs.get('pk')
+
+        if not User.objects.filter(id=author_id).exists():
+            raise serializers.ValidationError("Пользователь не существует")
+
+        if user.id == author_id:
+            raise serializers.ValidationError("Нельзя подписаться на себя")
+
+        return {
+            'user': user,
+            'author_id': author_id
+        }
+
+    def create(self, validated_data):
+        return Subscription.objects.create(**validated_data)
+
+    def delete(self):
+        user = self.context.get('request').user
+        author_id = self.context.get('view').kwargs.get('pk')
+        Subscription.objects.filter(user=user, author_id=author_id).delete()
+

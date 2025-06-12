@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 from api.filters import IngredientFilter, RecipeFilter
@@ -14,7 +14,7 @@ from api.permissions import IsAuthorOrReadOnly
 from api.serializers import (
     IngredientSerializer, RecipeSerializer,
     FavoriteSerializer,
-    ShoppingCartSerializer
+    ShoppingCartSerializer, RecipeShortLinkSerializer
 )
 
 
@@ -34,6 +34,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthorOrReadOnly]
 
     serializer_class = RecipeSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAuthorOrReadOnly()]
+        return super().get_permissions()
 
     @action(
         methods=['post', 'delete'],
@@ -120,14 +130,17 @@ class RecipeViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename="shopping_list.txt"'
         return response
 
-    @action(
-        methods=['get'],
-        detail=True,
-        permission_classes=[IsAuthenticated]
-    )
-    def get_link(self, request, pk=None):
-        recipe = self.get_object()
-        short_path = f"/s/{recipe.id}/"
-        full_url = request.build_absolute_uri(short_path)
-        return Response({'short_link': full_url}, status=status.HTTP_200_OK)
 
+class RecipeShortLinkViewSet(viewsets.ModelViewSet):
+    queryset = Recipe.objects.all()
+    serializer_class = RecipeShortLinkSerializer
+    permission_classes = [AllowAny]  # Можешь изменить на нужные разрешения
+    lookup_field = 'pk'  # По умолчанию используется 'pk', но можно задать и 'id'
+
+    http_method_names = ['get']  # Разрешаем только GET-запросы
+
+    def retrieve(self, request, *args, **kwargs):
+        recipe = self.get_object()
+        serializer = self.get_serializer(recipe)
+        print(serializer.data, '1', sep=r'/n'*100)
+        return Response(serializer.data)

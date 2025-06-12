@@ -1,6 +1,6 @@
 from django.urls import path
 from djoser.views import TokenCreateView, TokenDestroyView
-from users.views import UserViewSet, RegisterView, UserTokenView
+from users.views import UserViewSet, RegisterView, UserTokenView, SubscriptionViewSet
 
 urlpatterns = [
     # Users endpoints
@@ -20,6 +20,13 @@ urlpatterns = [
          UserViewSet.as_view({'get': 'retrieve', 'put': 'update',
                               'patch': 'partial_update', 'delete': 'destroy'}),
          name='users-detail'),
+    path('api/users/subscriptions/',
+         SubscriptionViewSet.as_view({'get': 'list'}),
+         name='subscriptions'),
+
+    path('api/users/<int:pk>/subscribe/',
+         SubscriptionViewSet.as_view({'post': 'subscribe', 'delete': 'subscribe'}),
+         name='subscribe'),
 
     # Authentication endpoints
     path('api/auth/register/',
