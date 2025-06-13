@@ -20,10 +20,11 @@ urlpatterns = [
          UserViewSet.as_view({'get': 'retrieve', 'put': 'update',
                               'patch': 'partial_update', 'delete': 'destroy'}),
          name='users-detail'),
-    path('api/users/subscriptions/',
-         SubscriptionViewSet.as_view({'get': 'list'}),
+    # Получить список подписок
+    path('api/users/subscriptions/', SubscriptionViewSet.as_view({'get': 'list'}),
          name='subscriptions'),
 
+    # Подписка/отписка
     path('api/users/<int:pk>/subscribe/',
          SubscriptionViewSet.as_view({'post': 'subscribe', 'delete': 'subscribe'}),
          name='subscribe'),

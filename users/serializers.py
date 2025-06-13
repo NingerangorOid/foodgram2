@@ -105,11 +105,70 @@ class TokenSerializer(serializers.ModelSerializer):
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
-    author = CustomUserSerializer(read_only=True)  # Твой сериализатор пользователя
-
     class Meta:
         model = Subscription
-        fields = ['author']
+        fields = ['author', 'recipes_count', 'recipes']
+
+    def get_author(self, obj):
+        user = obj.author
+        return {
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email,
+            'is_subscribed': Subscription.objects.filter(
+                user=obj.user, author=user
+            ).exists(),
+            'avatar': self.context['request'].build_absolute_uri(user.avatar.url) if user.avatar else None,
+        }
+
+    def get_recipes_count(self, obj):
+        return obj.author.recipes.count()
+
+    def get_recipes(self, obj):
+        request = self.context.get('request')
+        recipes_limit = request.query_params.get('recipes_limit')
+        if recipes_limit:
+            try:
+                recipes_limit = int(recipes_limit)
+                if recipes_limit < 0:
+                    raise ValueError("recipes_limit должен быть положительным числом")
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({
+                    'recipes_limit': ['Неверное значение recipes_limit']
+                })
+
+            recipes = obj.author.recipes.all()[:recipes_limit]
+        else:
+            recipes = obj.author.recipes.all()[:3]  # По умолчанию первые 3 рецепта
+
+        return [
+            {
+                'id': recipe.id,
+                'name': recipe.name,
+                'image': request.build_absolute_uri(recipe.image.url) if recipe.image else None,
+                'cooking_time': recipe.cooking_time
+            }
+            for recipe in recipes
+        ]
+
+    def to_representation(self, instance):
+        # Получаем данные автора
+        author_data = self.get_author(instance)
+
+        # Возвращаем структуру, где поля автора находятся на верхнем уровне
+        return {
+            'id': author_data['id'],
+            'username': author_data['username'],
+            'first_name': author_data['first_name'],
+            'last_name': author_data['last_name'],
+            'email': author_data['email'],
+            'is_subscribed': author_data['is_subscribed'],
+            'avatar': author_data['avatar'],
+            'recipes_count': self.get_recipes_count(instance),
+            'recipes': self.get_recipes(instance)
+        }
 
     def validate(self, data):
         request = self.context.get('request')
@@ -135,4 +194,3 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         user = self.context.get('request').user
         author_id = self.context.get('view').kwargs.get('pk')
         Subscription.objects.filter(user=user, author_id=author_id).delete()
-

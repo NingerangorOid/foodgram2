@@ -3,7 +3,9 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
 
+from core.pagination import CustomPagination
 from users.models import Subscription
 from users.serializers import (
     CustomUserSerializer, SetPasswordSerializer, AvatarSerializer, TokenSerializer, SubscriptionSerializer
@@ -177,43 +179,47 @@ class UserTokenView(generics.RetrieveAPIView):
         return token
 
 
-class SubscriptionViewSet(viewsets.ModelViewSet):
-    queryset = Subscription.objects.all()
-    serializer_class = SubscriptionSerializer
+class SubscriptionViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
-    lookup_field = 'author_id'
+    pagination_class = CustomPagination()
 
-    def get_queryset(self):
-        return Subscription.objects.filter(user=self.request.user)
+    def list(self, request):
+        """GET /api/users/subscriptions/"""
+        queryset = Subscription.objects.filter(user=request.user)
 
-    # Список подписок: GET /api/users/subscriptions/
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        if not queryset.exists():
+            return Response(
+                {'detail': 'У вас пока нет подписок'},
+                status=status.HTTP_200_OK
+            )
 
-    # Подписка/отписка: POST/DELETE /api/users/<id>/subscribe/
-    @action(detail=True, methods=['post', 'delete'])
+        page = self.pagination_class.paginate_queryset(queryset, request)
+        serializer = SubscriptionSerializer(page, many=True, context={'request': request})
+        return self.pagination_class.get_paginated_response(serializer.data)
+
     def subscribe(self, request, pk=None):
+        """POST/DELETE /api/users/<pk>/subscribe/"""
         user = request.user
 
-        if not User.objects.filter(id=pk).exists():
+        try:
+            author = User.objects.get(id=pk)
+        except User.DoesNotExist:
             return Response({'error': 'Пользователь не найден'}, status=status.HTTP_404_NOT_FOUND)
 
         if user.id == pk:
             return Response({'error': 'Нельзя подписаться на себя'}, status=status.HTTP_400_BAD_REQUEST)
 
         if request.method == 'POST':
-            subscription, created = Subscription.objects.get_or_create(
-                user=user,
-                author_id=pk
-            )
+            subscription, created = Subscription.objects.get_or_create(user=user, author=author)
             if not created:
                 return Response({'error': 'Вы уже подписаны'}, status=status.HTTP_400_BAD_REQUEST)
-            return Response(status=status.HTTP_201_CREATED)
+
+            serializer = SubscriptionSerializer(subscription, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         elif request.method == 'DELETE':
             deleted, _ = Subscription.objects.filter(user=user, author_id=pk).delete()
             if not deleted:
                 return Response({'error': 'Вы не подписаны'}, status=status.HTTP_400_BAD_REQUEST)
+
             return Response(status=status.HTTP_204_NO_CONTENT)
