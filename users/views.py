@@ -1,5 +1,6 @@
-from rest_framework import generics, status, viewsets, permissions
+from rest_framework import generics, status, viewsets
 from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import get_user_model
@@ -24,8 +25,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['me', 'set_password', 'manage_avatar']:
-            return [permissions.IsAuthenticated()]
-        return [permissions.AllowAny()]
+            return [IsAuthenticated()]
+        return [AllowAny()]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -53,7 +54,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(
         methods=['get'],
         detail=False,
-        permission_classes=[permissions.IsAuthenticated]
+        permission_classes=[IsAuthenticated]
     )
     def get_own_avatar(self, request):
         user = request.user
@@ -65,7 +66,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(
         methods=['get'],
         detail=False,
-        permission_classes=[permissions.IsAuthenticated]
+        permission_classes=[IsAuthenticated]
     )
     def me(self, request):
         serializer = self.get_serializer(request.user)
@@ -74,7 +75,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(
         methods=['post'],
         detail=False,
-        permission_classes=[permissions.IsAuthenticated]
+        permission_classes=[IsAuthenticated]
     )
     def set_password(self, request):
         serializer = SetPasswordSerializer(data=request.data)
@@ -96,7 +97,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(
         methods=['put', 'delete'],
         detail=False,
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[IsAuthenticated],
         url_path='avatar'
     )
     def manage_avatar(self, request):
@@ -117,7 +118,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(
         methods=['post', 'delete'],
         detail=True,
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[IsAuthenticated],
         url_path='subscribe'
     )
     def subscribe(self, request, pk=None):
@@ -152,7 +153,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = CustomUserSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -172,7 +173,7 @@ class RegisterView(generics.CreateAPIView):
 class UserTokenView(generics.RetrieveAPIView):
     queryset = Token.objects.all()
     serializer_class = TokenSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
         token, created = Token.objects.get_or_create(user=self.request.user)
@@ -180,11 +181,11 @@ class UserTokenView(generics.RetrieveAPIView):
 
 
 class SubscriptionViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = CustomPagination()
+    permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['get'])
     def list(self, request):
-        """GET /api/users/subscriptions/"""
+        print('', '', sep=r'/n'*100)
         queryset = Subscription.objects.filter(user=request.user)
 
         if not queryset.exists():
@@ -193,12 +194,12 @@ class SubscriptionViewSet(viewsets.ViewSet):
                 status=status.HTTP_200_OK
             )
 
-        page = self.pagination_class.paginate_queryset(queryset, request)
+        paginator = CustomPagination()
+        page = paginator.paginate_queryset(queryset, request)
         serializer = SubscriptionSerializer(page, many=True, context={'request': request})
-        return self.pagination_class.get_paginated_response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
     def subscribe(self, request, pk=None):
-        """POST/DELETE /api/users/<pk>/subscribe/"""
         user = request.user
 
         try:

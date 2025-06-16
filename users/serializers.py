@@ -104,10 +104,30 @@ class TokenSerializer(serializers.ModelSerializer):
         fields = ('key', 'user')
 
 
-class SubscriptionSerializer(serializers.ModelSerializer):
+class SubscriptionSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='author.id')
+    username = serializers.CharField(source='author.username')
+    first_name = serializers.CharField(source='author.first_name')
+    last_name = serializers.CharField(source='author.last_name')
+    email = serializers.EmailField(source='author.email')
+    is_subscribed = serializers.SerializerMethodField()
+    avatar = serializers.SerializerMethodField()
+    recipes_count = serializers.SerializerMethodField()
+    recipes = serializers.SerializerMethodField()
     class Meta:
-        model = Subscription
-        fields = ['author', 'recipes_count', 'recipes']
+        fields = [
+            'id', 'username', 'first_name', 'last_name', 'email',
+            'is_subscribed', 'avatar', 'recipes_count', 'recipes'
+        ]
+
+    def get_is_subscribed(self, obj):
+        return True  # Потому что мы уже подписаны
+
+    def get_avatar(self, obj):
+        request = self.context.get('request')
+        if obj.author.avatar:
+            return request.build_absolute_uri(obj.author.avatar.url)
+        return None
 
     def get_author(self, obj):
         user = obj.author
@@ -129,28 +149,23 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     def get_recipes(self, obj):
         request = self.context.get('request')
         recipes_limit = request.query_params.get('recipes_limit')
+
+        recipes = obj.author.recipes.all()
+
         if recipes_limit:
             try:
-                recipes_limit = int(recipes_limit)
-                if recipes_limit < 0:
-                    raise ValueError("recipes_limit должен быть положительным числом")
-            except (TypeError, ValueError):
-                raise serializers.ValidationError({
-                    'recipes_limit': ['Неверное значение recipes_limit']
-                })
-
-            recipes = obj.author.recipes.all()[:recipes_limit]
-        else:
-            recipes = obj.author.recipes.all()[:3]  # По умолчанию первые 3 рецепта
+                recipes = recipes[:int(recipes_limit)]
+            except ValueError:
+                raise serializers.ValidationError("recipes_limit должен быть числом")
 
         return [
             {
-                'id': recipe.id,
-                'name': recipe.name,
-                'image': request.build_absolute_uri(recipe.image.url) if recipe.image else None,
-                'cooking_time': recipe.cooking_time
+                'id': r.id,
+                'name': r.name,
+                'image': request.build_absolute_uri(r.image.url) if r.image else None,
+                'cooking_time': r.cooking_time
             }
-            for recipe in recipes
+            for r in recipes
         ]
 
     def to_representation(self, instance):

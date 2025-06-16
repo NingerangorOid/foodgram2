@@ -4,6 +4,12 @@ from users.views import UserViewSet, RegisterView, UserTokenView, SubscriptionVi
 
 urlpatterns = [
     # Users endpoints
+    path('api/users/subscriptions/', SubscriptionViewSet.as_view({'get': 'list'}),
+         name='subscriptions'),
+    # Подписка/отписка
+    path('api/users/<int:pk>/subscribe/',
+         SubscriptionViewSet.as_view({'post': 'subscribe', 'delete': 'subscribe'}),
+         name='subscribe'),
     path('api/users/',
          UserViewSet.as_view({'get': 'list', 'post': 'create'}),
          name='users-list'),
@@ -21,13 +27,7 @@ urlpatterns = [
                               'patch': 'partial_update', 'delete': 'destroy'}),
          name='users-detail'),
     # Получить список подписок
-    path('api/users/subscriptions/', SubscriptionViewSet.as_view({'get': 'list'}),
-         name='subscriptions'),
 
-    # Подписка/отписка
-    path('api/users/<int:pk>/subscribe/',
-         SubscriptionViewSet.as_view({'post': 'subscribe', 'delete': 'subscribe'}),
-         name='subscribe'),
 
     # Authentication endpoints
     path('api/auth/register/',
