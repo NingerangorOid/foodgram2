@@ -185,7 +185,6 @@ class SubscriptionViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def list(self, request):
-        print('', '', sep=r'/n'*100)
         queryset = Subscription.objects.filter(user=request.user)
 
         if not queryset.exists():

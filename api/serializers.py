@@ -230,19 +230,27 @@ class RecipeShortLinkSerializer(serializers.Serializer):
         return {'short-link': instance.short_link}
 
 
-class ShoppingCartRecipeSerializer(serializers.ModelSerializer):
-    author = CustomUserSerializer(source='recipe.author', read_only=True)
+class ShoppingCartRecipeSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='recipe.id')
+    name = serializers.CharField(source='recipe.name')
     image = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ShoppingCart
-        fields = ['id', 'name', 'image', 'cooking_time', 'author']
+    cooking_time = serializers.IntegerField(source='recipe.cooking_time')
 
     def get_image(self, obj):
         request = self.context.get('request')
-        if obj.image and hasattr(obj.image, 'url'):
-            return request.build_absolute_uri(obj.image.url)
+        recipe = obj.recipe
+        if recipe.image and hasattr(recipe.image, 'url'):
+            return request.build_absolute_uri(recipe.image.url)
         return None
+
+    def to_representation(self, instance):
+        print("Вызван to_representation", flush=True)
+        return {
+            'id': instance.recipe.id,
+            'name': instance.recipe.name,
+            'image': self.get_image(instance),
+            'cooking_time': instance.recipe.cooking_time
+        }
 
 
 class FavoriteRecipeSerializer(serializers.ModelSerializer):

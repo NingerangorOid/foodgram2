@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
@@ -97,73 +97,71 @@ class ShoppingCartViewSet(viewsets.ModelViewSet):
     serializer_class = ShoppingCartRecipeSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post', 'delete']
-    pagination_class = CustomPagination  # если используешь пагинацию
 
     def get_queryset(self):
         user = self.request.user
         recipe_ids = ShoppingCart.objects.filter(user=user).values_list('recipe_id', flat=True)
         return Recipe.objects.filter(id__in=recipe_ids)
 
-    def list(self, request, *args, **kwargs):
-        """GET /api/recipes/shopping_cart/"""
-        print("Вызван метод list", flush=True)
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+    def get_serializer_context(self):
+        """Передаем request в контекст сериалайзера"""
+        return {'request': self.request}
 
     def create(self, request, *args, **kwargs):
-        print("Вызван метод create", '', sep=r'\n'*100, flush=True)
-        print("Request:", request.data, flush=True)
-        print("User:", request.user, flush=True)
         recipe_id = kwargs.get('pk')
         user = request.user
 
+        # 1. Получаем рецепт или 404
         recipe = get_object_or_404(Recipe, id=recipe_id)
 
+        # 2. Нельзя добавить свой рецепт
         if recipe.author == user:
             return Response(
                 {'error': 'Нельзя добавить свой рецепт в корзину'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if ShoppingCart.objects.filter(recipe=recipe, user=user).exists():
+        # 3. Уже в корзине?
+        if ShoppingCart.objects.filter(user=user, recipe=recipe).exists():
             return Response(
                 {'error': 'Рецепт уже в корзине'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        cart_item = ShoppingCart.objects.create(recipe=recipe, user=user)
-        serializer = self.get_serializer(cart_item)
+        # 4. Создаём запись в корзине
+        cart_item = ShoppingCart.objects.create(user=user, recipe=recipe)
+
+        # 5. Сериализуем напрямую через наш простой сериалайзер
+        serializer = ShoppingCartRecipeSerializer(instance=cart_item, context={'request': request})
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    def get_serializer(self, instance=None, data=None, many=False, partial=False):
+        context = self.get_serializer_context()
+        return self.serializer_class(instance, data=data, many=many, partial=partial, context=context)
+
     def destroy(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            self.perform_destroy(instance)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as e:
-            print(f"Ошибка при удалении: {e}", flush=True)
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        instance = self.get_object()
+        deleted, _ = ShoppingCart.objects.filter(recipe=instance.recipe, user=request.user).delete()
+        if not deleted:
+            return Response({'error': 'Рецепт не был в корзине'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_object(self):
-        """Получаем объект корзины по recipe_id и user"""
         recipe_id = self.kwargs.get('pk')
         if not recipe_id:
-            raise NotFound("Требуется указать ID рецепта")
+            raise NotFound("Не указан ID рецепта")
 
-        cart_item = ShoppingCart.objects.filter(recipe_id=recipe_id, user=self.request.user).first()
+        try:
+            recipe = Recipe.objects.get(id=recipe_id)
+        except Recipe.DoesNotExist:
+            raise NotFound("Рецепт не существует")
+
+        cart_item = ShoppingCart.objects.filter(recipe=recipe, user=self.request.user).first()
         if not cart_item:
-            raise NotFound("Рецепт не был добавлен в корзину")
+            raise ValidationError("Рецепт не был добавлен в корзину", code="not_in_cart")
 
         return cart_item
-
-    def get_serializer_context(self):
-        return {'request': self.request}
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def download_shopping_cart(self, request):
