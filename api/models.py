@@ -143,7 +143,7 @@ class Favorite(models.Model):
                 name='unique_favorite'
             )
         ]
-
+#c
     def __str__(self):
         return f'{self.recipe} в избранном у {self.user}'
 
